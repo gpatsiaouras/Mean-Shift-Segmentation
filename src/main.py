@@ -1,12 +1,25 @@
 import time
+import cv2
+import random
 import numpy as np
 import scipy.io
+from skimage import io, color
 import matplotlib.pyplot as plt
+import progressbar
 from mpl_toolkits.mplot3d import Axes3D
 
 
-class Segmentation:
-    def __init__(self, data, radius):
+def plot_data_points_and_peaks(data, model):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(data[0], data[1], data[2])
+    peaks = np.array(model.peaks).reshape(len(model.peaks), 3).T
+    ax.scatter(peaks[0], peaks[1], peaks[2])
+    plt.show()
+
+
+class MeanShiftSegmentation:
+    def __init__(self, data, radius, c):
         """
         Assigns data and radius
         Initiates a threshold and a conversion threshold, an empty list to save peaks,
@@ -16,7 +29,7 @@ class Segmentation:
         """
         self.data = data
         self.radius = radius
-        self.c = 4
+        self.c = c
         self.conversion_threshold = self.radius / 2
         self.threshold = 0.01
         self.peaks = []
@@ -80,11 +93,13 @@ class Segmentation:
         the peak and assigns the approriate label.
         """
         start_time = time.time()
-        for i in range(self.data.shape[1]):
+        print("Running mean shift algorithm")
+        for i in progressbar.progressbar(range(self.data.shape[1]), redirect_stdout=True):
             peak = self.find_peak(self.data[:, i].reshape(self.data.shape[0], 1))
             self.labels[i] = self.get_label_for_point(peak)
 
-        print("\rMean Shift: {0:.2f} seconds".format(time.time() - start_time) * 1000)
+        print("\rPeaks found: {0}, Exec Time Mean Shift: {1:.2f} seconds"
+              .format(len(self.peaks), time.time() - start_time) * 1000)
 
     def mean_shift_opt(self):
         """
@@ -92,13 +107,15 @@ class Segmentation:
         points along the search path association with the converged peak.
         """
         start_time = time.time()
-        for i in range(self.data.shape[1]):
+        print("Running mean shift algorithm optimized")
+        for i in progressbar.progressbar(range(self.data.shape[1]), redirect_stdout=True):
             if self.labels[i] == -1:
                 peak, points_in_radius = self.find_peak_opt(self.data[:, i].reshape(self.data.shape[0], 1))
                 self.labels[i] = self.get_label_for_point(peak)
                 self.labels[points_in_radius] = self.labels[i]
 
-        print("\rOptimized Mean Shift: {0:.2f} seconds".format(time.time() - start_time) * 1000)
+        print("\rPeaks found: {0}, Exec Time Optimized Mean Shift: {1:.2f} seconds"
+              .format(len(self.peaks), time.time() - start_time) * 1000)
 
     def get_data_in_radius_from_point(self, cluster_point):
         """
@@ -114,6 +131,13 @@ class Segmentation:
         return extracted.reshape(3, extracted.shape[0] // 3), points_in_radius
 
     def get_point_keys_in_radius(self, cluster_point, radius):
+        """
+        Returns indices of data that are inside radius of the cluster points by
+        calculating their euclidean distance.
+        :param cluster_point: Center of Sphere
+        :param radius: Radius to be appllied
+        :return: array with true false values whether the element belongs to sphere or not
+        """
         return np.linalg.norm(cluster_point - self.data, axis=0) < radius
 
     def converged(self, mean_data_point, previous_data_point):
@@ -142,24 +166,47 @@ class Segmentation:
 
         return len(self.peaks) - 1
 
+    def im_segment(self, image, radius):
+        pass
+
 
 if __name__ == "__main__":
-    # Read data
-    data = np.array(scipy.io.loadmat('pts.mat')['data'])
+    # Read debug data
+    data = np.array(scipy.io.loadmat('../resources/pts.mat')['data'])
 
-    # Without Optimization
-    image_seg = Segmentation(data, 2)
-    image_seg.mean_shift()
+    # Read image
+    image = cv2.imread("../resources/55075.jpg")
+    cv2.imshow('Original image', image)
 
-    # With Optimization
-    image_seg_opt = Segmentation(data, 2)
+    image = color.rgb2lab(image)
+    image_array = np.zeros((3, image.shape[0] * image.shape[1]))
+    l, a, b = cv2.split(image)
+    image_array[0, :] = l.flatten()
+    image_array[1, :] = a.flatten()
+    image_array[2, :] = b.flatten()
+
+    # Run Without Optimization
+    # image_seg = MeanShiftSegmentation(data, radius=2, c=4)
+    # image_seg.mean_shift()
+
+    # Run With Optimization
+    image_seg_opt = MeanShiftSegmentation(image_array, radius=30, c=10)
     image_seg_opt.mean_shift_opt()
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(data[0], data[1], data[2])
-    peaks = np.array(image_seg_opt.peaks).reshape(2, 3).T
-    ax.scatter(peaks[0], peaks[1], peaks[2])
-    plt.show()
+    # Plot data points
+    # plot_data_points_and_peaks(image_array, image_seg_opt)
 
-    # print(image_seg.labels)
+    overlay = np.zeros((3, image_seg_opt.labels.shape[0]))
+
+    # for segment in np.unique(image_seg_opt.labels):
+    for segment in np.unique(image_seg_opt.labels):
+        overlay[:, image_seg_opt.labels == segment] = np.average(image_array[:, image_seg_opt.labels == segment])
+
+    overlay = cv2.merge((overlay[0, :], overlay[1, :], overlay[2, :]))
+    overlay = overlay.reshape(image.shape[0], image.shape[1], 3)
+    overlay = color.lab2rgb(overlay)
+
+    cv2.imwrite('../out/overlay.jpg', overlay * 255)
+    cv2.imshow('Segmented image', overlay)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
