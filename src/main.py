@@ -172,11 +172,20 @@ class MeanShiftSegmentation:
 
 
 def run_mean_shift_on_test_dataset():
+    """
+    Debugs the algorithm by using the test dataset provided in the
+    description of the assignment, and prints the data representation
+    and the peaks found. Runs both with no optimization and with optimization
+    to print time difference.
+    """
+    radius = 2
+    c = 4
+
     # Read debug data
     data = np.array(scipy.io.loadmat('../resources/pts.mat')['data'])
 
     # Run Without Optimization
-    image_seg = MeanShiftSegmentation(data, radius=2, c=4)
+    image_seg = MeanShiftSegmentation(data, radius, c)
     image_seg.mean_shift()
 
     # Run With Optimization
@@ -188,16 +197,26 @@ def run_mean_shift_on_test_dataset():
 
 
 def run_mean_shift_on_image():
-    filename = "181091.jpg"
+    """
+    Runs the mean shift algorithm on images. The filename defines the image
+    that we want to segment, located inside the resources folder. It runs
+    using the optimized version of mean shift and then creates an empty image
+    and by using the labels array from the segmentation algorithm it prints
+    the segments of the image on the overlay.
+    """
+    # Define parameters
+    filename = "55075.jpg"
     radius = 10
     c = 5
-    # Read debug data
-    data = np.array(scipy.io.loadmat('../resources/pts.mat')['data'])
 
     # Read image
     image = cv2.imread("../resources/" + filename)
+
+    # Show original image for comparison
     cv2.imshow('Original image', image)
 
+    # Convert the image to lab colors. Create an image_array numpy array with size 3, x, y
+    # the same dimensions that the algorithm is using.
     image = color.rgb2lab(image)
     image_array = np.zeros((3, image.shape[0] * image.shape[1]))
     l, a, b = cv2.split(image)
@@ -205,20 +224,24 @@ def run_mean_shift_on_image():
     image_array[1, :] = a.flatten()
     image_array[2, :] = b.flatten()
 
-    # Run With Optimization
+    # Run With Optimization on the image_array
     image_seg_opt = MeanShiftSegmentation(image_array, radius, c)
     image_seg_opt.mean_shift_opt()
 
+    # Create an empty overlay array to be used for the segmented image
     overlay = np.zeros((3, image_seg_opt.labels.shape[0]))
 
-    # for segment in np.unique(image_seg_opt.labels):
+    # For each of the segments replace all features beloning having this label
+    # with the l,a,b values of the peak for this label.
     for segment in np.unique(image_seg_opt.labels):
-        overlay[:, image_seg_opt.labels == segment] = np.mean(image_array[:, image_seg_opt.labels == segment])
+        overlay[:, image_seg_opt.labels == segment] = image_seg_opt.peaks[int(segment)]
 
+    # Merge the layers back, Unflatten the array and convert back to rgb
     overlay = cv2.merge((overlay[0, :], overlay[1, :], overlay[2, :]))
     overlay = overlay.reshape(image.shape[0], image.shape[1], 3)
     overlay = color.lab2rgb(overlay)
 
+    # Save the image to skip training and show it.
     cv2.imwrite("../out/{0}_rad_{1}_c_{2}.jpg".format(filename.split(".")[0], radius, c), overlay * 255)
     cv2.imshow('Segmented image', overlay)
     cv2.waitKey(0)
@@ -226,8 +249,7 @@ def run_mean_shift_on_image():
 
 
 if __name__ == "__main__":
-    # Run on the test data
+    # Uncomment to run on the test data
     # run_mean_shift_on_test_dataset()
 
-    # Run on an image
     run_mean_shift_on_image()
