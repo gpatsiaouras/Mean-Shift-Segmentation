@@ -1,5 +1,6 @@
 import time
 import cv2
+import sys
 import random
 import numpy as np
 import scipy.io
@@ -31,7 +32,7 @@ class MeanShiftSegmentation:
         self.radius = radius
         self.c = c
         self.conversion_threshold = self.radius / 2
-        self.threshold = 0.01
+        self.threshold = 0.01  # 0.01
         self.peaks = []
         # Initiate labels with -1 values indicating that there is no label assigned yet
         self.labels = np.ones(data.shape[1]) * -1
@@ -170,12 +171,31 @@ class MeanShiftSegmentation:
         pass
 
 
-if __name__ == "__main__":
+def run_mean_shift_on_test_dataset():
+    # Read debug data
+    data = np.array(scipy.io.loadmat('../resources/pts.mat')['data'])
+
+    # Run Without Optimization
+    image_seg = MeanShiftSegmentation(data, radius=2, c=4)
+    image_seg.mean_shift()
+
+    # Run With Optimization
+    image_seg_opt = MeanShiftSegmentation(data, radius, c)
+    image_seg_opt.mean_shift_opt()
+
+    # Plot data points
+    plot_data_points_and_peaks(data, image_seg_opt)
+
+
+def run_mean_shift_on_image():
+    filename = "181091.jpg"
+    radius = 10
+    c = 5
     # Read debug data
     data = np.array(scipy.io.loadmat('../resources/pts.mat')['data'])
 
     # Read image
-    image = cv2.imread("../resources/55075.jpg")
+    image = cv2.imread("../resources/" + filename)
     cv2.imshow('Original image', image)
 
     image = color.rgb2lab(image)
@@ -185,28 +205,29 @@ if __name__ == "__main__":
     image_array[1, :] = a.flatten()
     image_array[2, :] = b.flatten()
 
-    # Run Without Optimization
-    # image_seg = MeanShiftSegmentation(data, radius=2, c=4)
-    # image_seg.mean_shift()
-
     # Run With Optimization
-    image_seg_opt = MeanShiftSegmentation(image_array, radius=30, c=10)
+    image_seg_opt = MeanShiftSegmentation(image_array, radius, c)
     image_seg_opt.mean_shift_opt()
-
-    # Plot data points
-    # plot_data_points_and_peaks(image_array, image_seg_opt)
 
     overlay = np.zeros((3, image_seg_opt.labels.shape[0]))
 
     # for segment in np.unique(image_seg_opt.labels):
     for segment in np.unique(image_seg_opt.labels):
-        overlay[:, image_seg_opt.labels == segment] = np.average(image_array[:, image_seg_opt.labels == segment])
+        overlay[:, image_seg_opt.labels == segment] = np.mean(image_array[:, image_seg_opt.labels == segment])
 
     overlay = cv2.merge((overlay[0, :], overlay[1, :], overlay[2, :]))
     overlay = overlay.reshape(image.shape[0], image.shape[1], 3)
     overlay = color.lab2rgb(overlay)
 
-    cv2.imwrite('../out/overlay.jpg', overlay * 255)
+    cv2.imwrite("../out/{0}_rad_{1}_c_{2}.jpg".format(filename.split(".")[0], radius, c), overlay * 255)
     cv2.imshow('Segmented image', overlay)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    # Run on the test data
+    # run_mean_shift_on_test_dataset()
+
+    # Run on an image
+    run_mean_shift_on_image()
