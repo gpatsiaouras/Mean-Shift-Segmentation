@@ -263,13 +263,13 @@ if __name__ == "__main__":
     # Uncomment to run on the test data
     # run_mean_shift_on_test_dataset()
 
-    t1 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 10, 5, True, False,))
+    t1 = Thread(target=run_mean_shift_on_image, args=("landscape_100x63.jpg", 10, 5, False, False,))
     t1.start()
-    t2 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 20, 5, True, False,))
+    t2 = Thread(target=run_mean_shift_on_image, args=("landscape_100x63.jpg", 20, 5, False, False,))
     t2.start()
-    t3 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 30, 5, True, False,))
+    t3 = Thread(target=run_mean_shift_on_image, args=("landscape_100x63.jpg", 30, 5, False, False,))
     t3.start()
-    t4 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 40, 5, True, False,))
+    t4 = Thread(target=run_mean_shift_on_image, args=("landscape_100x63.jpg", 40, 5, False, False,))
     t4.start()
 
     # run_mean_shift_on_image("55075_xs.jpg", radius=20, c=4, five_dimensions=True, show_images=False)
