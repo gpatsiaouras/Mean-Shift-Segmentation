@@ -196,7 +196,7 @@ def run_mean_shift_on_test_dataset():
     plot_data_points_and_peaks(data, image_seg_opt)
 
 
-def run_mean_shift_on_image():
+def run_mean_shift_on_image(filename, radius, c, show_images=False):
     """
     Runs the mean shift algorithm on images. The filename defines the image
     that we want to segment, located inside the resources folder. It runs
@@ -204,16 +204,12 @@ def run_mean_shift_on_image():
     and by using the labels array from the segmentation algorithm it prints
     the segments of the image on the overlay.
     """
-    # Define parameters
-    filename = "55075.jpg"
-    radius = 10
-    c = 5
-
     # Read image
     image = cv2.imread("../resources/" + filename)
 
     # Show original image for comparison
-    cv2.imshow('Original image', image)
+    if show_images:
+        cv2.imshow('Original image', image)
 
     # Convert the image to lab colors. Create an image_array numpy array with size 3, x, y
     # the same dimensions that the algorithm is using.
@@ -243,13 +239,14 @@ def run_mean_shift_on_image():
 
     # Save the image to skip training and show it.
     cv2.imwrite("../out/{0}_rad_{1}_c_{2}.jpg".format(filename.split(".")[0], radius, c), overlay * 255)
-    cv2.imshow('Segmented image', overlay)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    if show_images:
+        cv2.imshow('Segmented image', overlay)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
     # Uncomment to run on the test data
     # run_mean_shift_on_test_dataset()
 
-    run_mean_shift_on_image()
+    run_mean_shift_on_image("181091.jpg", 20, 1)
