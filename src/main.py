@@ -5,6 +5,7 @@ import scipy.io
 from skimage import io, color
 import matplotlib.pyplot as plt
 import progressbar
+from threading import Thread
 from mpl_toolkits.mplot3d import Axes3D
 
 
@@ -63,6 +64,7 @@ class MeanShiftSegmentation:
         self.peaks = []
         # Initiate labels with -1 values indicating that there is no label assigned yet
         self.labels = np.ones(data.shape[1]) * -1
+        self.active_threads = 0
 
     def find_peak(self, previous_data_point):
         """
@@ -136,14 +138,16 @@ class MeanShiftSegmentation:
         """
         start_time = time.time()
         print("Running mean shift algorithm optimized")
+        find_peaks_called = 0
         for i in progressbar.progressbar(range(self.data.shape[1]), redirect_stdout=True):
             if self.labels[i] == -1:
                 peak, points_in_radius = self.find_peak_opt(self.data[:, i].reshape(self.data.shape[0], 1))
                 self.labels[i] = self.get_label_for_point(peak)
                 self.labels[points_in_radius] = self.labels[i]
+                find_peaks_called += 1
 
-        print("\rPeaks found: {0}, Exec Time Optimized Mean Shift: {1:.2f} seconds"
-              .format(len(self.peaks), time.time() - start_time) * 1000)
+        print("\rPeaks found: {0}, Exec Time Optimized Mean Shift: {1:.2f} seconds, Called find peaks: {2:.2f}%"
+              .format(len(self.peaks), (time.time() - start_time) * 1000, find_peaks_called/self.data.shape[1] * 100))
 
     def get_data_in_radius_from_point(self, cluster_point):
         """
@@ -270,5 +274,14 @@ if __name__ == "__main__":
     # Uncomment to run on the test data
     # run_mean_shift_on_test_dataset()
 
-    run_mean_shift_on_image("181091.jpg", radius=20, c=5, five_dimensions=True, show_images=False)
-    run_mean_shift_on_image("181091.jpg", radius=20, c=5, five_dimensions=False, show_images=False)
+    # t1 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 10, 5, True, False,))
+    # t1.start()
+    # t2 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 20, 5, True, False,))
+    # t2.start()
+    # t3 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 30, 5, True, False,))
+    # t3.start()
+    # t4 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 40, 5, True, False,))
+    # t4.start()
+
+    run_mean_shift_on_image("55075.jpg", radius=20, c=4, five_dimensions=True, show_images=False)
+    # run_mean_shift_on_image("368078.jpg", radius=20, c=5, five_dimensions=True, show_images=False)
