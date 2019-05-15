@@ -1,0 +1,7 @@
+progressbar2==3.39.3
+sklearn==0.0
+scipy==1.1.0
+scikit-image==0.15.0
+scikit-learn==0.20.3
+matplotlib==3.0.1
+numpy==1.15.2
