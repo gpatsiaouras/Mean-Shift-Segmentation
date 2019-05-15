@@ -74,12 +74,12 @@ class MeanShiftSegmentation:
         :param previous_data_point:
         :return mean_data_point: Peak found
         """
-        neighbors, points_in_radius = self.get_data_in_radius_from_point(previous_data_point)
-        mean_data_point = np.mean(neighbors, axis=1).reshape(self.data.shape[0], 1)
+        points_keys, distances = self.get_data_in_radius_from_point(previous_data_point)
+        mean_data_point = np.mean(self.data[:, points_keys], axis=1)
         while not self.converged(mean_data_point, previous_data_point):
             previous_data_point = mean_data_point
-            neighbors, points_in_radius = self.get_data_in_radius_from_point(mean_data_point)
-            mean_data_point = np.mean(neighbors, axis=1).reshape(self.data.shape[0], 1)
+            points_keys, distances = self.get_data_in_radius_from_point(mean_data_point)
+            mean_data_point = np.mean(self.data[:, points_keys], axis=1)
 
         return mean_data_point
 
@@ -94,28 +94,28 @@ class MeanShiftSegmentation:
         # no feature should be associated with label.
         points_to_be_associated = np.full((self.data.shape[1],), False, dtype=bool)
 
-        points_values, points_keys = self.get_data_in_radius_from_point(previous_data_point)
-        mean_data_point = np.mean(points_values, axis=1).reshape(self.data.shape[0], 1)
+        points_keys, distances = self.get_data_in_radius_from_point(previous_data_point)
+        mean_data_point = np.mean(self.data[:, points_keys], axis=1)
 
         while not self.converged(mean_data_point, previous_data_point):
             previous_data_point = mean_data_point
 
             # Get the new points inside the sphere
-            points_values, points_keys = self.get_data_in_radius_from_point(mean_data_point)
+            points_keys, distances = self.get_data_in_radius_from_point(mean_data_point)
 
             # Second optimization. Take the points in range radius/c
-            points_keys_2 = self.get_point_keys_in_radius(mean_data_point, self.radius / self.c)
+            points_keys_2 = np.argwhere(distances < self.radius/self.c)
 
             # Second optimization Save the path of the algorithm
-            points_to_be_associated = points_to_be_associated | points_keys_2
+            points_to_be_associated[points_keys_2] = True
 
             # Recalculate mean point
-            mean_data_point = np.mean(points_values, axis=1).reshape(self.data.shape[0], 1)
+            mean_data_point = np.mean(self.data[:, points_keys], axis=1)
 
         # In the existing point keys also add the data in radius distance from the last mean point.
         # as instructed by the first optimization
-        points_to_be_associated = points_to_be_associated | points_keys
-        return mean_data_point, points_to_be_associated
+        points_to_be_associated[points_keys] = True
+        return mean_data_point, points_keys
 
     def mean_shift(self):
         """
@@ -147,7 +147,7 @@ class MeanShiftSegmentation:
                 find_peaks_called += 1
 
         print("\rPeaks found: {0}, Exec Time Optimized Mean Shift: {1:.2f} seconds, Called find peaks: {2:.2f}%"
-              .format(len(self.peaks), (time.time() - start_time) * 1000, find_peaks_called/self.data.shape[1] * 100))
+              .format(len(self.peaks), time.time() - start_time, find_peaks_called/self.data.shape[1] * 100))
 
     def get_data_in_radius_from_point(self, cluster_point):
         """
@@ -158,19 +158,10 @@ class MeanShiftSegmentation:
         :param cluster_point: Center of sphere
         :return points_in_range, indices_of_points: Points in range their indices
         """
-        points_in_radius = self.get_point_keys_in_radius(cluster_point, self.radius)
-        extracted = np.extract(np.tile(points_in_radius, (self.data.shape[0], 1)), self.data)
-        return extracted.reshape(self.data.shape[0], extracted.shape[0] // self.data.shape[0]), points_in_radius
-
-    def get_point_keys_in_radius(self, cluster_point, radius):
-        """
-        Returns indices of data that are inside radius of the cluster points by
-        calculating their euclidean distance.
-        :param cluster_point: Center of Sphere
-        :param radius: Radius to be appllied
-        :return: array with true false values whether the element belongs to sphere or not
-        """
-        return np.linalg.norm(cluster_point - self.data, axis=0) < radius
+        distances_from_point = np.linalg.norm(cluster_point - self.data, axis=0)
+        return np.argwhere(distances_from_point < self.radius), distances_from_point
+        # extracted = np.extract(np.tile(points_in_radius, (self.data.shape[0], 1)), self.data)
+        # return extracted.reshape(self.data.shape[0], extracted.shape[0] // self.data.shape[0]), points_in_radius
 
     def converged(self, mean_data_point, previous_data_point):
         """
@@ -190,6 +181,7 @@ class MeanShiftSegmentation:
         :param new_peak: New peak found for this point
         :return index of peak: Index of the peak in the peaks list
         """
+        # peaks_array = np.array(self.peaks)
         for peak_idx in range(len(self.peaks)):
             if (np.abs(new_peak - self.peaks[peak_idx]) < self.conversion_threshold).all():
                 return peak_idx
@@ -197,9 +189,6 @@ class MeanShiftSegmentation:
         self.peaks.append(new_peak)
 
         return len(self.peaks) - 1
-
-    def im_segment(self, image, radius):
-        pass
 
 
 def run_mean_shift_on_test_dataset():
@@ -274,14 +263,14 @@ if __name__ == "__main__":
     # Uncomment to run on the test data
     # run_mean_shift_on_test_dataset()
 
-    # t1 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 10, 5, True, False,))
-    # t1.start()
-    # t2 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 20, 5, True, False,))
-    # t2.start()
-    # t3 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 30, 5, True, False,))
-    # t3.start()
-    # t4 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 40, 5, True, False,))
-    # t4.start()
+    t1 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 10, 5, True, False,))
+    t1.start()
+    t2 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 20, 5, True, False,))
+    t2.start()
+    t3 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 30, 5, True, False,))
+    t3.start()
+    t4 = Thread(target=run_mean_shift_on_image, args=("368078_xs.jpg", 40, 5, True, False,))
+    t4.start()
 
-    run_mean_shift_on_image("55075.jpg", radius=20, c=4, five_dimensions=True, show_images=False)
+    # run_mean_shift_on_image("55075_xs.jpg", radius=20, c=4, five_dimensions=True, show_images=False)
     # run_mean_shift_on_image("368078.jpg", radius=20, c=5, five_dimensions=True, show_images=False)
