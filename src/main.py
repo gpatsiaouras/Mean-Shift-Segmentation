@@ -1,7 +1,5 @@
 import time
 import cv2
-import sys
-import random
 import numpy as np
 import scipy.io
 from skimage import io, color
@@ -17,6 +15,35 @@ def plot_data_points_and_peaks(data, model):
     peaks = np.array(model.peaks).reshape(len(model.peaks), 3).T
     ax.scatter(peaks[0], peaks[1], peaks[2])
     plt.show()
+
+
+def get_3d_representation(image):
+    """
+    Convert the image to lab colors. Create an image_array numpy array with size 3, width, height.
+    :param image: Image read from cv2
+    :return: Array representation of image
+    """
+    image = color.rgb2lab(image)
+    image_array = np.zeros((3, image.shape[0] * image.shape[1]))
+    l, a, b = cv2.split(image)
+    image_array[0, :] = l.flatten()
+    image_array[1, :] = a.flatten()
+    image_array[2, :] = b.flatten()
+
+    return image_array
+
+
+def get_5d_representation(image):
+    image = color.rgb2lab(image)
+    image_array = np.zeros((5, image.shape[0] * image.shape[1]))
+    l, a, b = cv2.split(image)
+    image_array[0, :] = l.flatten()
+    image_array[1, :] = a.flatten()
+    image_array[2, :] = b.flatten()
+    image_array[3, :] = np.tile(np.array(range(0, image.shape[0])), image.shape[1]).flatten()
+    image_array[4, :] = np.tile(np.array(range(0, image.shape[1])), image.shape[0]).flatten()
+
+    return image_array
 
 
 class MeanShiftSegmentation:
@@ -128,8 +155,8 @@ class MeanShiftSegmentation:
         :return points_in_range, indices_of_points: Points in range their indices
         """
         points_in_radius = self.get_point_keys_in_radius(cluster_point, self.radius)
-        extracted = np.extract(np.tile(points_in_radius, (3, 1)), self.data)
-        return extracted.reshape(3, extracted.shape[0] // 3), points_in_radius
+        extracted = np.extract(np.tile(points_in_radius, (self.data.shape[0], 1)), self.data)
+        return extracted.reshape(self.data.shape[0], extracted.shape[0] // self.data.shape[0]), points_in_radius
 
     def get_point_keys_in_radius(self, cluster_point, radius):
         """
@@ -196,7 +223,7 @@ def run_mean_shift_on_test_dataset():
     plot_data_points_and_peaks(data, image_seg_opt)
 
 
-def run_mean_shift_on_image(filename, radius, c, show_images=False):
+def run_mean_shift_on_image(filename, radius, c, five_dimensions=False, show_images=False):
     """
     Runs the mean shift algorithm on images. The filename defines the image
     that we want to segment, located inside the resources folder. It runs
@@ -207,18 +234,10 @@ def run_mean_shift_on_image(filename, radius, c, show_images=False):
     # Read image
     image = cv2.imread("../resources/" + filename)
 
-    # Show original image for comparison
-    if show_images:
-        cv2.imshow('Original image', image)
-
-    # Convert the image to lab colors. Create an image_array numpy array with size 3, x, y
-    # the same dimensions that the algorithm is using.
-    image = color.rgb2lab(image)
-    image_array = np.zeros((3, image.shape[0] * image.shape[1]))
-    l, a, b = cv2.split(image)
-    image_array[0, :] = l.flatten()
-    image_array[1, :] = a.flatten()
-    image_array[2, :] = b.flatten()
+    if five_dimensions:
+        image_array = get_5d_representation(image)
+    else:
+        image_array = get_3d_representation(image)
 
     # Run With Optimization on the image_array
     image_seg_opt = MeanShiftSegmentation(image_array, radius, c)
@@ -230,7 +249,7 @@ def run_mean_shift_on_image(filename, radius, c, show_images=False):
     # For each of the segments replace all features beloning having this label
     # with the l,a,b values of the peak for this label.
     for segment in np.unique(image_seg_opt.labels):
-        overlay[:, image_seg_opt.labels == segment] = image_seg_opt.peaks[int(segment)]
+        overlay[:, image_seg_opt.labels == segment] = image_seg_opt.peaks[int(segment)][:3]
 
     # Merge the layers back, Unflatten the array and convert back to rgb
     overlay = cv2.merge((overlay[0, :], overlay[1, :], overlay[2, :]))
@@ -238,9 +257,11 @@ def run_mean_shift_on_image(filename, radius, c, show_images=False):
     overlay = color.lab2rgb(overlay)
 
     # Save the image to skip training and show it.
-    cv2.imwrite("../out/{0}_rad_{1}_c_{2}.jpg".format(filename.split(".")[0], radius, c), overlay * 255)
+    cv2.imwrite("../out/{0}_rad_{1}_c_{2}{3}.jpg"
+                .format(filename.split(".")[0], radius, c, ("_5d" if five_dimensions else "")), overlay * 255)
     if show_images:
-        cv2.imshow('Segmented image', overlay)
+        cv2.imshow('Original Image', image)
+        cv2.imshow('Segmented Image', overlay)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -249,4 +270,5 @@ if __name__ == "__main__":
     # Uncomment to run on the test data
     # run_mean_shift_on_test_dataset()
 
-    run_mean_shift_on_image("181091.jpg", 20, 1)
+    run_mean_shift_on_image("181091.jpg", radius=20, c=5, five_dimensions=True, show_images=False)
+    run_mean_shift_on_image("181091.jpg", radius=20, c=5, five_dimensions=False, show_images=False)
