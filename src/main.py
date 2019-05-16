@@ -12,15 +12,18 @@ from mpl_toolkits.mplot3d import Axes3D
 def plot_data_points_and_peaks(data, model):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(data[0], data[1], data[2])
+    ax.scatter(data[0, np.where(model.labels == 0)], data[1, np.where(model.labels == 0)],
+               data[2, np.where(model.labels == 0)], c="lightblue")
+    ax.scatter(data[0, np.where(model.labels == 1)], data[1, np.where(model.labels == 1)],
+               data[2, np.where(model.labels == 1)], c="lightgreen")
     peaks = np.array(model.peaks).reshape(len(model.peaks), 3).T
-    ax.scatter(peaks[0], peaks[1], peaks[2])
+    ax.scatter(peaks[0], peaks[1], peaks[2], c="red")
     plt.show()
 
 
 def get_3d_representation(image):
     """
-    Convert the image to lab colors. Create an image_array numpy array with size 3, width, height.
+    Convert the image to lab colors. Create an image_array numpy array with size 3.
     :param image: Image read from cv2
     :return: Array representation of image
     """
@@ -35,6 +38,11 @@ def get_3d_representation(image):
 
 
 def get_5d_representation(image):
+    """
+    Convert the image to lab colors. Create an image_array numpy array with size 5, width, height.
+    :param image: Image read from cv2
+    :return: Array representation of image
+    """
     image = color.rgb2lab(image)
     image_array = np.zeros((5, image.shape[0] * image.shape[1]))
     l, a, b = cv2.split(image)
@@ -64,7 +72,6 @@ class MeanShiftSegmentation:
         self.peaks = []
         # Initiate labels with -1 values indicating that there is no label assigned yet
         self.labels = np.ones(data.shape[1]) * -1
-        self.active_threads = 0
 
     def find_peak(self, previous_data_point):
         """
@@ -86,7 +93,7 @@ class MeanShiftSegmentation:
     def find_peak_opt(self, previous_data_point):
         """
         Finds peak point as find_peak but also returns the points that should be associated with the label
-        defined by this peak.
+        defined by this peak according to the speedups.
         :param previous_data_point:
         :return mean_data_point, points_in_radius: Peak found and points at range
         """
@@ -104,7 +111,7 @@ class MeanShiftSegmentation:
             points_keys, distances = self.get_data_in_radius_from_point(mean_data_point)
 
             # Second optimization. Take the points in range radius/c
-            points_keys_2 = np.argwhere(distances < self.radius/self.c)
+            points_keys_2 = np.argwhere(distances < self.radius / self.c)
 
             # Second optimization Save the path of the algorithm
             points_to_be_associated[points_keys_2] = True
@@ -129,7 +136,7 @@ class MeanShiftSegmentation:
             self.labels[i] = self.get_label_for_point(peak)
 
         print("\rPeaks found: {0}, Exec Time Mean Shift: {1:.2f} seconds"
-              .format(len(self.peaks), time.time() - start_time) * 1000)
+              .format(len(self.peaks), time.time() - start_time))
 
     def mean_shift_opt(self):
         """
@@ -147,21 +154,18 @@ class MeanShiftSegmentation:
                 find_peaks_called += 1
 
         print("\rPeaks found: {0}, Exec Time Optimized Mean Shift: {1:.2f} seconds, Called find peaks: {2:.2f}%"
-              .format(len(self.peaks), time.time() - start_time, find_peaks_called/self.data.shape[1] * 100))
+              .format(len(self.peaks), time.time() - start_time, find_peaks_called / self.data.shape[1] * 100))
 
     def get_data_in_radius_from_point(self, cluster_point):
         """
-        Applies a sphere with specified radius and filters and returns the data points
-        belonging to this sphere. It also returns the conditional array holding the indices
-        of each point from the original array and True or False, indicating if they belong
-        to the current sphere or not.
+        Retrieves distances of all data points from specific point, then returns the indices
+        of the points that have a distance less than the radius, but also the distances from the points.
+        The latter one is later used in findPeak for optimization reasons
         :param cluster_point: Center of sphere
-        :return points_in_range, indices_of_points: Points in range their indices
+        :return points_in_range, distances:
         """
         distances_from_point = np.linalg.norm(cluster_point - self.data, axis=0)
         return np.argwhere(distances_from_point < self.radius), distances_from_point
-        # extracted = np.extract(np.tile(points_in_radius, (self.data.shape[0], 1)), self.data)
-        # return extracted.reshape(self.data.shape[0], extracted.shape[0] // self.data.shape[0]), points_in_radius
 
     def converged(self, mean_data_point, previous_data_point):
         """
@@ -239,7 +243,7 @@ def run_mean_shift_on_image(filename, radius, c, five_dimensions=False, show_ima
     # Create an empty overlay array to be used for the segmented image
     overlay = np.zeros((3, image_seg_opt.labels.shape[0]))
 
-    # For each of the segments replace all features beloning having this label
+    # For each of the segments replace all features having this label
     # with the l,a,b values of the peak for this label.
     for segment in np.unique(image_seg_opt.labels):
         overlay[:, image_seg_opt.labels == segment] = image_seg_opt.peaks[int(segment)][:3]
@@ -249,7 +253,7 @@ def run_mean_shift_on_image(filename, radius, c, five_dimensions=False, show_ima
     overlay = overlay.reshape(image.shape[0], image.shape[1], 3)
     overlay = color.lab2rgb(overlay)
 
-    # Save the image to skip training and show it.
+    # Save the image to skip resegmenting and show it if user asked for it.
     cv2.imwrite("../out/{0}_rad_{1}_c_{2}{3}.jpg"
                 .format(filename.split(".")[0], radius, c, ("_5d" if five_dimensions else "")), overlay * 255)
     if show_images:
@@ -261,16 +265,17 @@ def run_mean_shift_on_image(filename, radius, c, five_dimensions=False, show_ima
 
 if __name__ == "__main__":
     # Uncomment to run on the test data
-    # run_mean_shift_on_test_dataset()
+    run_mean_shift_on_test_dataset()
 
-    t1 = Thread(target=run_mean_shift_on_image, args=("landscape_100x63.jpg", 10, 5, False, False,))
-    t1.start()
-    t2 = Thread(target=run_mean_shift_on_image, args=("landscape_100x63.jpg", 20, 5, False, False,))
-    t2.start()
-    t3 = Thread(target=run_mean_shift_on_image, args=("landscape_100x63.jpg", 30, 5, False, False,))
-    t3.start()
-    t4 = Thread(target=run_mean_shift_on_image, args=("landscape_100x63.jpg", 40, 5, False, False,))
-    t4.start()
+    # Run in multithread mode if your computer has 4 threads and more
+    # t1 = Thread(target=run_mean_shift_on_image, args=("181091_xs.jpg", 4, 2, True, False,))
+    # t1.start()
+    # t2 = Thread(target=run_mean_shift_on_image, args=("181091_xs.jpg", 8, 2, True, False,))
+    # t2.start()
+    # t3 = Thread(target=run_mean_shift_on_image, args=("181091_xs.jpg", 12, 5, False, False,))
+    # t3.start()
+    # t4 = Thread(target=run_mean_shift_on_image, args=("181091_xs.jpg", 16, 5, False, False,))
+    # t4.start()
 
-    # run_mean_shift_on_image("55075_xs.jpg", radius=20, c=4, five_dimensions=True, show_images=False)
-    # run_mean_shift_on_image("368078.jpg", radius=20, c=5, five_dimensions=True, show_images=False)
+    # Or run on single mode
+    run_mean_shift_on_image("181091_xs.jpg", radius=24, c=2, five_dimensions=False, show_images=False)
